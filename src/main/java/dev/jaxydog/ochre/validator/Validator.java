@@ -184,6 +184,8 @@ public abstract class Validator<T> {
     /**
      * Returns a string describing what this {@link Validator} received if the value failed validation.
      *
+     * @param value The received value.
+     *
      * @return What this {@link Validator} received.
      *
      * @since 0.1.0
@@ -279,6 +281,8 @@ public abstract class Validator<T> {
      * Gets this {@link Validator}'s current {@link Context}.
      * <p>
      * If there is not an active {@link Scope}, this will return {@link Optional#empty()}.
+     *
+     * @return The current {@link Context}
      *
      * @since 0.1.0
      */

@@ -171,6 +171,8 @@ public abstract class Converter<T, U> {
      * <p>
      * If there is not an active {@link Scope}, this will return {@link Optional#empty()}.
      *
+     * @return The current {@link Context}.
+     *
      * @since 0.1.0
      */
     public final @NotNull Optional<Context> getContext() {
@@ -282,7 +284,7 @@ public abstract class Converter<T, U> {
     }
 
     /**
-     * A method being executed, for usage within a {@link Context}.
+     * A method being executed by a {@link Converter}.
      *
      * @param name The method's name.
      *
