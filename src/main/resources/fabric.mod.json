@@ -1,0 +1,29 @@
+{
+    "schemaVersion": 1,
+
+    "id": "ochre",
+    "version": "${version}",
+    "license": "LGPL-3.0-or-later",
+
+    "name": "Ochre",
+    "description": "A small library for defining, reading, and writing configuration files.",
+    "authors": [ "Jaxydog" ],
+    "contributors": [ ],
+    "icon": "assets/ochre/icon.png",
+    "contact": {
+        "issues": "https://github.com/Jaxydog/Ochre/issues",
+        "sources": "https://github.com/Jaxydog/Ochre",
+        "homepage": "https://modrinth.com/mod/ochre"
+    },
+
+    "environment": "*",
+    "entrypoints": {
+        "main": [ "dev.jaxydog.ochre.Ochre" ]
+    },
+    "depends": {
+        "fabricloader": ">=0.16.10",
+        "minecraft": "~1.21.4",
+        "java": ">=21",
+        "fabric-api": ">=0.118.0"
+    }
+}
