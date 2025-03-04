@@ -18,6 +18,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
+import dev.jaxydog.ochre.utility.ScopedException;
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import net.minecraft.util.Identifier;
@@ -36,7 +37,16 @@ import java.util.function.Function;
  * @author Jaxydog
  * @since 0.1.0
  */
-public abstract class JsonConverter<T> extends Converter<T, JsonElement> {
+public abstract class JsonConverter<T>
+    extends Converter<T, JsonElement>
+{
+
+    /**
+     * Creates a new {@link JsonConverter}.
+     *
+     * @since 0.1.0
+     */
+    protected JsonConverter() { }
 
     /**
      * A {@link Converter} for boolean values.
@@ -47,18 +57,16 @@ public abstract class JsonConverter<T> extends Converter<T, JsonElement> {
 
         @Override
         public @NotNull JsonElement into(final @NotNull Boolean value)
-            throws @NotNull ConverterException
+            throws @NotNull ScopedException
         {
             return new JsonPrimitive(value);
         }
 
         @Override
         public @NotNull Boolean from(final @NotNull JsonElement value)
-            throws @NotNull ConverterException
+            throws @NotNull ScopedException
         {
-            try (final @NotNull Scope scope = this.scope(this.context(Method.FROM, null))) {
-                return scope.call(value::getAsBoolean);
-            }
+            return this.runScoped(Method.FROM.context(), value::getAsBoolean);
         }
 
     };
@@ -72,18 +80,16 @@ public abstract class JsonConverter<T> extends Converter<T, JsonElement> {
 
         @Override
         public @NotNull JsonElement into(@NotNull Number value)
-            throws @NotNull ConverterException
+            throws @NotNull ScopedException
         {
             return new JsonPrimitive(value);
         }
 
         @Override
         public @NotNull Number from(@NotNull JsonElement value)
-            throws @NotNull ConverterException
+            throws @NotNull ScopedException
         {
-            try (final @NotNull Scope scope = this.scope(this.context(Method.FROM, null))) {
-                return scope.call(value::getAsNumber);
-            }
+            return this.runScoped(Method.FROM.context(), value::getAsNumber);
         }
 
     };
@@ -145,18 +151,16 @@ public abstract class JsonConverter<T> extends Converter<T, JsonElement> {
 
         @Override
         public @NotNull JsonElement into(@NotNull String value)
-            throws @NotNull ConverterException
+            throws @NotNull ScopedException
         {
             return new JsonPrimitive(value);
         }
 
         @Override
         public @NotNull String from(@NotNull JsonElement value)
-            throws @NotNull ConverterException
+            throws @NotNull ScopedException
         {
-            try (final @NotNull Scope scope = this.scope(this.context(Method.FROM, null))) {
-                return scope.call(value::getAsString);
-            }
+            return this.runScoped(Method.FROM.context(), value::getAsString);
         }
 
     };
@@ -184,14 +188,13 @@ public abstract class JsonConverter<T> extends Converter<T, JsonElement> {
 
             @Override
             public @NotNull JsonElement into(@NotNull List<@NotNull T> value)
-                throws @NotNull ConverterException
+                throws @NotNull ScopedException
             {
-                final JsonArray array = new JsonArray(value.size());
+                final @NotNull JsonArray array = new JsonArray(value.size());
+                final @NotNull Scope scope = this.createScope(Method.INTO.context("array construction"));
 
-                try (final @NotNull Scope scope = this.scope(this.context(Method.INTO, "array construction"))) {
-                    for (final @NotNull T entry : value) {
-                        array.add(scope.call(() -> thisInto.apply(entry)));
-                    }
+                for (final @NotNull T entry : value) {
+                    array.add(this.runScoped(scope, () -> thisInto.apply(entry)));
                 }
 
                 return array;
@@ -199,20 +202,16 @@ public abstract class JsonConverter<T> extends Converter<T, JsonElement> {
 
             @Override
             public @NotNull List<@NotNull T> from(@NotNull JsonElement value)
-                throws @NotNull ConverterException
+                throws @NotNull ScopedException
             {
-                final @NotNull JsonArray array;
-
-                try (final @NotNull Scope scope = this.scope(this.context(Method.FROM, "array resolution"))) {
-                    array = scope.call(value::getAsJsonArray);
-                }
+                final @NotNull JsonArray array =
+                    this.runScoped(Method.FROM.context("array resolution"), value::getAsJsonArray);
 
                 final @NotNull List<@NotNull T> list = new ObjectArrayList<>(array.size());
+                final @NotNull Scope scope = this.createScope(Method.INTO.context("list construction"));
 
-                try (final @NotNull Scope scope = this.scope(this.context(Method.FROM, "list construction"))) {
-                    for (final @NotNull JsonElement element : array.asList()) {
-                        list.add(scope.call(() -> thisFrom.apply(element)));
-                    }
+                for (final @NotNull JsonElement element : array.asList()) {
+                    list.add(this.runScoped(scope, () -> thisFrom.apply(element)));
                 }
 
                 return list;
@@ -236,14 +235,13 @@ public abstract class JsonConverter<T> extends Converter<T, JsonElement> {
 
             @Override
             public @NotNull JsonElement into(@NotNull Map<@NotNull String, @NotNull T> value)
-                throws @NotNull ConverterException
+                throws @NotNull ScopedException
             {
                 final @NotNull JsonObject object = new JsonObject();
+                final @NotNull Scope scope = this.createScope(Method.INTO.context("object construction"));
 
-                try (final @NotNull Scope scope = this.scope(this.context(Method.INTO, "object construction"))) {
-                    for (final @NotNull Entry<@NotNull String, @NotNull T> entry : value.entrySet()) {
-                        object.add(entry.getKey(), scope.call(() -> thisInto.apply(entry.getValue())));
-                    }
+                for (final @NotNull Entry<@NotNull String, @NotNull T> entry : value.entrySet()) {
+                    object.add(entry.getKey(), this.runScoped(scope, () -> thisInto.apply(entry.getValue())));
                 }
 
                 return object;
@@ -251,20 +249,16 @@ public abstract class JsonConverter<T> extends Converter<T, JsonElement> {
 
             @Override
             public @NotNull Map<String, T> from(@NotNull JsonElement value)
-                throws @NotNull ConverterException
+                throws @NotNull ScopedException
             {
-                final @NotNull JsonObject object;
-
-                try (final @NotNull Scope scope = this.scope(this.context(Method.FROM, "object resolution"))) {
-                    object = scope.call(value::getAsJsonObject);
-                }
+                final @NotNull JsonObject object =
+                    this.runScoped(Method.FROM.context("object resolution"), value::getAsJsonObject);
 
                 final @NotNull Map<String, T> map = new Object2ObjectOpenHashMap<>(object.size());
+                final @NotNull Scope scope = this.createScope(Method.FROM.context("map construction"));
 
-                try (final @NotNull Scope scope = this.scope(this.context(Method.FROM, "map construction"))) {
-                    for (final @NotNull Entry<@NotNull String, @NotNull JsonElement> entry : object.entrySet()) {
-                        map.put(entry.getKey(), scope.call(() -> thisFrom.apply(entry.getValue())));
-                    }
+                for (final @NotNull Entry<@NotNull String, @NotNull JsonElement> entry : object.entrySet()) {
+                    map.put(entry.getKey(), this.runScoped(scope, () -> thisFrom.apply(entry.getValue())));
                 }
 
                 return map;

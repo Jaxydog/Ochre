@@ -14,18 +14,14 @@
 
 package dev.jaxydog.ochre.validator;
 
+import dev.jaxydog.ochre.utility.Scoped;
+import dev.jaxydog.ochre.utility.ScopedException;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
-import org.jetbrains.annotations.UnknownNullability;
 
 import java.util.List;
-import java.util.NoSuchElementException;
-import java.util.Objects;
-import java.util.Optional;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Predicate;
-import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -37,14 +33,16 @@ import java.util.stream.Stream;
  * @author Jaxydog
  * @since 0.1.0
  */
-public abstract class Validator<T> {
+public abstract class Validator<T>
+    extends Scoped<Validator.Context>
+{
 
     /**
-     * The current scope.
+     * Creates a new {@link Validator}.
      *
      * @since 0.1.0
      */
-    private volatile @Nullable Scope scope = null;
+    protected Validator() { }
 
     /**
      * Creates a new {@link Validator} using the given predicate.
@@ -78,11 +76,9 @@ public abstract class Validator<T> {
 
             @Override
             public boolean test(@NotNull T value)
-                throws @NotNull ValidatorException
+                throws @NotNull ScopedException
             {
-                try (final @NotNull Scope scope = this.scope(this.context("custom implementation"))) {
-                    return scope.call(() -> predicate.test(value));
-                }
+                return this.runScoped(new Context("custom implementation"), () -> predicate.test(value));
             }
 
         };
@@ -119,12 +115,15 @@ public abstract class Validator<T> {
 
             @Override
             public boolean test(@NotNull T value)
-                throws @NotNull ValidatorException
+                throws @NotNull ScopedException
             {
-                try (final @NotNull Scope scope = this.scope(this.context("iterative testing"))) {
-                    return validators.stream()
-                        .allMatch((final @NotNull Validator<T> validator) -> scope.call(() -> validator.test(value)));
-                }
+                final @NotNull Scope scope = this.createScope(new Context("iterative testing"));
+
+                return validators.stream()
+                    .allMatch((final @NotNull Validator<T> validator) -> this.runScoped(
+                        scope,
+                        () -> validator.test(value)
+                    ));
             }
 
         };
@@ -161,12 +160,15 @@ public abstract class Validator<T> {
 
             @Override
             public boolean test(@NotNull T value)
-                throws @NotNull ValidatorException
+                throws @NotNull ScopedException
             {
-                try (final @NotNull Scope scope = this.scope(this.context("iterative testing"))) {
-                    return validators.stream()
-                        .anyMatch((final @NotNull Validator<T> validator) -> scope.call(() -> validator.test(value)));
-                }
+                final @NotNull Scope scope = this.createScope(new Context("iterative testing"));
+
+                return validators.stream()
+                    .anyMatch((final @NotNull Validator<T> validator) -> this.runScoped(
+                        scope,
+                        () -> validator.test(value)
+                    ));
             }
 
         };
@@ -199,95 +201,25 @@ public abstract class Validator<T> {
      *
      * @return Whether the given value is valid.
      *
-     * @throws ValidatorException If execution fails.
+     * @throws ScopedException If execution fails.
      * @since 0.1.0
      */
     public abstract boolean test(final @NotNull T value)
-        throws @NotNull ValidatorException;
+        throws @NotNull ScopedException;
 
     /**
      * Validates the given value, throwing a {@link InvalidValueException} if it fails.
      *
      * @param value The value to validate.
      *
-     * @throws ValidatorException If execution fails.
+     * @throws ScopedException If execution fails.
      * @throws InvalidValueException If the value is not considered valid.
      * @since 0.1.0
      */
     public void validate(final @NotNull T value)
-        throws @NotNull ValidatorException, @NotNull InvalidValueException
+        throws @NotNull ScopedException, @NotNull InvalidValueException
     {
         if (!this.test(value)) throw new InvalidValueException(this.expected(), this.received(value));
-    }
-
-    /**
-     * Creates a new {@link Context}.
-     *
-     * @param step The current validation step.
-     *
-     * @return A new {@link Context}.
-     *
-     * @since 0.1.0
-     */
-    protected final @NotNull Context context(final @NotNull String step) {
-        return this.new Context(step);
-    }
-
-    /**
-     * Creates a new {@link Scope}.
-     *
-     * @param context The scope's inner context.
-     *
-     * @return A new {@link Scope}.
-     *
-     * @throws IllegalStateException If this is called from within a {@link Scope}.
-     * @since 0.1.0
-     */
-    protected final @NotNull Scope scope(final @NotNull Context context)
-        throws @NotNull IllegalStateException
-    {
-        return this.new Scope(context);
-    }
-
-    /**
-     * Creates a new {@link ValidatorException} using the given extended message and source exception.
-     *
-     * @param extended The extended message, or {@code null} if not applicable.
-     * @param cause The source exception, or {@code null} if not applicable.
-     *
-     * @return A new {@link ValidatorException}.
-     *
-     * @throws NoSuchElementException If the serializer's context is unset.
-     * @since 0.1.0
-     */
-    protected final @NotNull ValidatorException exception(
-        final @Nullable String extended,
-        final @Nullable Exception cause
-    )
-        throws @UnknownNullability NoSuchElementException
-    {
-        final @NotNull Context context = this.getContext().orElseThrow();
-
-        if (cause instanceof final @NotNull ValidatorException actual && actual.getContext().equals(context)) {
-            return actual;
-        } else if (Objects.isNull(extended)) {
-            return new ValidatorException(context, cause);
-        } else {
-            return new ValidatorException(context, extended, cause);
-        }
-    }
-
-    /**
-     * Gets this {@link Validator}'s current {@link Context}.
-     * <p>
-     * If there is not an active {@link Scope}, this will return {@link Optional#empty()}.
-     *
-     * @return The current {@link Context}
-     *
-     * @since 0.1.0
-     */
-    public final @NotNull Optional<Context> getContext() {
-        return Optional.ofNullable(this.scope).map(Scope::getContext);
     }
 
     /**
@@ -321,181 +253,30 @@ public abstract class Validator<T> {
 
             @Override
             public boolean test(@NotNull T value)
-                throws @NotNull ValidatorException
+                throws @NotNull ScopedException
             {
-                try (final @NotNull Scope scope = this.scope(this.context("chaining"))) {
-                    return scope.call(() -> combine.apply(self.test(value), other.test(value)));
-                }
+                return this.runScoped(
+                    new Context("chaining"),
+                    () -> combine.apply(self.test(value), other.test(value))
+                );
             }
 
         };
     }
 
     /**
-     * An execution context for a {@link Validator}.
+     * A context used for a {@link Validator}'s inner {@link Scoped.Scope}.
+     *
+     * @param step The current validation step.
      *
      * @author Jaxydog
      * @since 0.1.0
      */
-    public final class Context {
-
-        /**
-         * The type of the outer {@link Validator}.
-         *
-         * @since 0.1.0
-         */
-        @SuppressWarnings("unchecked")
-        private final @NotNull Class<? extends Validator<T>> type =
-            (Class<? extends Validator<T>>) Validator.this.getClass();
-
-        /**
-         * The current validation step.
-         *
-         * @since 0.1.0
-         */
-        private final @NotNull String step;
-
-        /**
-         * Creates a new {@link Context}.
-         *
-         * @param step The current validation step.
-         *
-         * @since 0.1.0
-         */
-        private Context(final @NotNull String step) {
-            this.step = step;
-        }
-
-        /**
-         * Returns the current validation step.
-         *
-         * @return The validation step.
-         *
-         * @since 0.1.0
-         */
-        public @NotNull String getStep() {
-            return this.step;
-        }
-
-        /**
-         * Returns a description of the context for usage in exception messages.
-         *
-         * @return A description of the context.
-         *
-         * @since 0.1.0
-         */
-        public @NotNull String getDescription() {
-            return "'%s'".formatted(this.getStep());
-        }
-
-    }
-
-    /**
-     * A temporary scope with a unique {@link Context} for usage within the current {@link Validator}.
-     *
-     * @author Jaxydog
-     * @since 0.1.0
-     */
-    public final class Scope implements AutoCloseable {
-
-        /**
-         * The scope's context.
-         *
-         * @since 0.1.0
-         */
-        private final @NotNull Context context;
-
-        /**
-         * Creates a new {@link Scope}.
-         *
-         * @param context The scope's context.
-         *
-         * @throws IllegalStateException If this is called when a scope is already active.
-         * @since 0.1.0
-         */
-        public Scope(final @NotNull Context context)
-            throws @NotNull IllegalStateException
-        {
-            this.context = context;
-
-            synchronized (this) {
-                if (Objects.isNull(Validator.this.scope)) {
-                    Validator.this.scope = this;
-                } else {
-                    throw new IllegalStateException("Cannot create a scope from within a scope");
-                }
-            }
-        }
-
-        /**
-         * Returns this scope's context.
-         *
-         * @return The context.
-         *
-         * @since 0.1.0
-         */
-        public @NotNull Context getContext() {
-            return this.context;
-        }
-
-        /**
-         * Runs the given {@link Runnable} within this scope.
-         *
-         * @param runnable The function to invoke.
-         *
-         * @throws ValidatorException If the function throws an exception.
-         * @throws IllegalStateException If this scope is not active.
-         * @since 0.1.0
-         */
-        public void call(final @NotNull Runnable runnable)
-            throws @NotNull ValidatorException, @NotNull IllegalStateException
-        {
-            if (Objects.isNull(Validator.this.scope)) {
-                throw new IllegalStateException("The scope is not active");
-            }
-
-            try {
-                runnable.run();
-            } catch (final @UnknownNullability Exception exception) {
-                throw Validator.this.exception(null, exception);
-            }
-        }
-
-        /**
-         * Runs the given {@link Supplier} within this scope.
-         *
-         * @param supplier The function to invoke.
-         * @param <V> The return type of the function.
-         *
-         * @return The return value of the given function.
-         *
-         * @throws ValidatorException If the function throws an exception.
-         * @throws IllegalStateException If this scope is not active.
-         * @since 0.1.0
-         */
-        public <V> @UnknownNullability V call(final @NotNull Supplier<@UnknownNullability V> supplier)
-            throws @NotNull ValidatorException, @NotNull IllegalStateException
-        {
-            if (Objects.isNull(Validator.this.scope)) {
-                throw new IllegalStateException("The scope is not active");
-            }
-
-            try {
-                return supplier.get();
-            } catch (final @UnknownNullability Exception exception) {
-                throw Validator.this.exception(null, exception);
-            }
-        }
+    public record Context(@NotNull String step) {
 
         @Override
-        public synchronized void close()
-            throws @NotNull IllegalStateException
-        {
-            if (Objects.equals(this, Validator.this.scope)) {
-                Validator.this.scope = null;
-            } else {
-                throw new IllegalStateException("The scope being closed is not the current scope");
-            }
+        public String toString() {
+            return "step '%s'".formatted(this.step());
         }
 
     }
